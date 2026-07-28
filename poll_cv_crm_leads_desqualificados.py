@@ -93,7 +93,7 @@ def salvar_estado(estado: dict) -> None:
 # Busca de leads cancelados
 # ---------------------------------------------------------------------------
 
-def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 50) -> list:
+def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 20) -> list:
     """
     Pagina pelo endpoint de leads filtrando por idsituacao. Retorna todos os
     leads encontrados (sem filtrar motivo ainda -- isso e feito depois).
@@ -108,9 +108,7 @@ def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 50) -> list:
             "offset": offset,
         }
         url = f"{CV_CRM_BASE_URL}/v1/comercial/leads"
-        response = requests.get(url, headers=HEADERS, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
+        data = _get_com_retry(url, params)
 
         pagina_leads = data.get("leads", [])
         leads.extend(pagina_leads)
@@ -120,6 +118,27 @@ def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 50) -> list:
         offset += limit
 
     return leads
+
+
+def _get_com_retry(url: str, params: dict, tentativas: int = 3) -> dict:
+    """
+    A API do CV CRM as vezes demora para responder em consultas mais
+    pesadas. Tenta ate 3 vezes, aumentando o timeout a cada tentativa,
+    antes de desistir de fato.
+    """
+    ultimo_erro = None
+    for tentativa in range(1, tentativas + 1):
+        timeout = 30 * tentativa  # 30s, 60s, 90s
+        try:
+            response = requests.get(url, headers=HEADERS, params=params, timeout=timeout)
+            response.raise_for_status()
+            return response.json()
+        except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError) as erro:
+            ultimo_erro = erro
+            print(f"Tentativa {tentativa}/{tentativas} falhou ({erro.__class__.__name__}). "
+                  f"Tentando de novo com timeout maior..." if tentativa < tentativas else
+                  f"Tentativa {tentativa}/{tentativas} falhou. Desistindo.")
+    raise ultimo_erro
 
 
 # ---------------------------------------------------------------------------
