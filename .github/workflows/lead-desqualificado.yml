@@ -12,6 +12,7 @@ permissions:
 jobs:
   poll-e-envia:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # seguranca: cancela automaticamente se travar
     steps:
       - name: Checkout do repositorio
         uses: actions/checkout@v4
