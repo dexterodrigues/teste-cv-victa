@@ -206,6 +206,7 @@ def main() -> None:
     maior_data_cancelamento = ultima_data_processada
     enviados = 0
     ignorados_motivo = 0
+    falhas = 0
 
     for lead_cv in leads:
         data_cancelamento = lead_cv.get("data_cancelamento", "")
@@ -220,17 +221,24 @@ def main() -> None:
             continue
 
         lead_mapeado = mapear_lead(lead_cv)
-        resultado = enviar_lead_desqualificado(lead_mapeado)
-        print(f"Lead {lead_cv.get('idlead')} -> {resultado}")
-        enviados += 1
 
+        try:
+            resultado = enviar_lead_desqualificado(lead_mapeado)
+            print(f"Lead {lead_cv.get('idlead')} -> {resultado}")
+            enviados += 1
+        except Exception as erro:
+            print(f"Lead {lead_cv.get('idlead')} FALHOU -> {erro.__class__.__name__}: {erro}")
+            falhas += 1
+
+        # Avanca o cursor de data mesmo em caso de falha, para nao tentar
+        # reprocessar um lead permanentemente problematico a cada execucao.
         if data_cancelamento > maior_data_cancelamento:
             maior_data_cancelamento = data_cancelamento
 
     estado["ultima_data_cancelamento_processada"] = maior_data_cancelamento
     salvar_estado(estado)
 
-    print(f"Concluido. Enviados: {enviados}. Ignorados (motivo fora do alvo): {ignorados_motivo}.")
+    print(f"Concluido. Enviados: {enviados}. Ignorados (motivo fora do alvo): {ignorados_motivo}. Falhas: {falhas}.")
 
 
 if __name__ == "__main__":

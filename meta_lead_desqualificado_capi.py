@@ -39,6 +39,12 @@ import requests
 PIXEL_ID = "1901452027112190"  # pixel-coqueiral
 GRAPH_API_VERSION = "v20.0"
 ACCESS_TOKEN = os.environ["META_CAPI_ACCESS_TOKEN"]  # nunca hardcode o token
+if not ACCESS_TOKEN.strip():
+    raise RuntimeError(
+        "META_CAPI_ACCESS_TOKEN esta vazio. Confira se a secret foi "
+        "cadastrada com um valor (nao so o nome) em Settings > Secrets "
+        "and variables > Actions."
+    )
 
 CAPI_URL = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{PIXEL_ID}/events"
 
@@ -150,9 +156,17 @@ def enviar_lead_desqualificado(lead: dict) -> dict:
         return {"skipped": True, "motivo": motivo}
 
     payload = build_event_payload(lead)
+    user_data = payload["data"][0]["user_data"]
+    if not user_data:
+        return {"skipped": True, "motivo": "sem dados de identificacao (sem lead_id/ctwa_clid/email/telefone)"}
+
     params = {"access_token": ACCESS_TOKEN}
 
     response = requests.post(CAPI_URL, params=params, json=payload, timeout=10)
+    if not response.ok:
+        # Mostra o corpo do erro do Meta (geralmente tem a causa exata em
+        # response["error"]["message"]), nao so o codigo HTTP.
+        print("Erro do Meta CAPI:", response.status_code, response.text)
     response.raise_for_status()
     return response.json()
 
