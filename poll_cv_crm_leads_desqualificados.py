@@ -52,6 +52,11 @@ CV_CRM_SUBDOMINIO = os.environ["CV_CRM_SUBDOMINIO"]
 CV_CRM_EMAIL = os.environ["CV_CRM_EMAIL"]
 CV_CRM_TOKEN = os.environ["CV_CRM_TOKEN"]
 
+# ID da situacao "Cancelado" no workflow de Leads. Descoberto manualmente
+# (via curl em um lead ja cancelado) porque o endpoint de descoberta
+# automatica de workflow nao esta documentado publicamente para a v1.
+CV_CRM_IDSITUACAO_CANCELADO = int(os.environ["CV_CRM_IDSITUACAO_CANCELADO"])
+
 CV_CRM_BASE_URL = f"https://{CV_CRM_SUBDOMINIO}.cvcrm.com.br/api"
 HEADERS = {"email": CV_CRM_EMAIL, "token": CV_CRM_TOKEN}
 
@@ -82,35 +87,6 @@ def carregar_estado() -> dict:
 
 def salvar_estado(estado: dict) -> None:
     STATE_FILE.write_text(json.dumps(estado, indent=2))
-
-
-# ---------------------------------------------------------------------------
-# Descoberta do ID da situacao "Cancelado"
-# ---------------------------------------------------------------------------
-
-def obter_id_situacao_cancelado() -> int:
-    """
-    Busca as situacoes do workflow de Leads e retorna o id daquela com
-    flag "cancelada". Assume funcionalidade="leads" -- ajuste se necessario.
-    """
-    url = f"{CV_CRM_BASE_URL}/v1/workflows/leads"
-    response = requests.get(url, headers=HEADERS, timeout=15)
-    response.raise_for_status()
-    situacoes = response.json()
-
-    # A estrutura exata de retorno pode variar; tentamos alguns formatos comuns.
-    lista = situacoes.get("situacoes") if isinstance(situacoes, dict) else situacoes
-
-    for situacao in lista:
-        flag = (situacao.get("flag") or "").lower()
-        if flag in ("cancelada", "cancelado"):
-            return situacao["id"]
-
-    raise RuntimeError(
-        "Nao foi possivel encontrar a situacao com flag 'cancelada' no "
-        "workflow de leads. Verifique o nome da funcionalidade e a "
-        "estrutura de retorno do endpoint /workflows/leads."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -195,8 +171,7 @@ def main() -> None:
     estado = carregar_estado()
     ultima_data_processada = estado["ultima_data_cancelamento_processada"]
 
-    idsituacao_cancelado = obter_id_situacao_cancelado()
-    leads = buscar_leads_cancelados(idsituacao_cancelado)
+    leads = buscar_leads_cancelados(CV_CRM_IDSITUACAO_CANCELADO)
 
     maior_data_cancelamento = ultima_data_processada
     enviados = 0
