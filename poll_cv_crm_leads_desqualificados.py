@@ -38,6 +38,7 @@ ATENCAO / PONTOS PRA VALIDAR:
 
 import json
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -82,7 +83,12 @@ SLUGS_CTWA_CLID_CANDIDATOS = ["ctwa_clid", "cf_ctwa_clid", "meta_ctwa_clid"]
 def carregar_estado() -> dict:
     if STATE_FILE.exists():
         return json.loads(STATE_FILE.read_text())
-    return {"ultima_data_cancelamento_processada": "1970-01-01 00:00:00"}
+    # Sem state.json ainda: comeca 90 dias atras, nao em 1970.
+    # Eventos mais antigos que isso nao tem uso pratico (a Custom Audience
+    # do Meta so olha ate 180 dias, e nao vale a pena reprocessar anos de
+    # historico logo na primeira execucao).
+    data_inicial = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d %H:%M:%S")
+    return {"ultima_data_cancelamento_processada": data_inicial}
 
 
 def salvar_estado(estado: dict) -> None:
@@ -93,15 +99,17 @@ def salvar_estado(estado: dict) -> None:
 # Busca de leads cancelados
 # ---------------------------------------------------------------------------
 
-def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 20) -> list:
+def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 20, max_paginas: int = 50) -> list:
     """
     Pagina pelo endpoint de leads filtrando por idsituacao. Retorna todos os
     leads encontrados (sem filtrar motivo ainda -- isso e feito depois).
+    Teto de max_paginas (50 x 20 = 1000 leads) como seguranca extra, alem
+    do timeout-minutes do proprio workflow.
     """
     leads = []
     offset = 0
 
-    while True:
+    for _ in range(max_paginas):
         params = {
             "idsituacao": idsituacao_cancelado,
             "limit": limit,
@@ -116,6 +124,9 @@ def buscar_leads_cancelados(idsituacao_cancelado: int, limit: int = 20) -> list:
         if len(pagina_leads) < limit:
             break
         offset += limit
+    else:
+        print(f"Atingiu o teto de {max_paginas} paginas -- parando por seguranca. "
+              f"Se isso acontecer com frequencia, pode ser preciso paginar em lotes menores.")
 
     return leads
 
